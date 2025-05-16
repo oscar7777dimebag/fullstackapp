@@ -6,7 +6,7 @@ function App() {
   const [respuesta, setRespuesta] = useState("");
 
   useEffect(() => {
-    fetch("http://127.0.0.1:5000/api/message")
+ñ    fetch("http://179.5.119.85/api/message")
       .then((res) => res.json())
       .then((data) => setMessage(data.message))
       .catch(() => setMessage("Error al obtener mensaje"));
@@ -16,7 +16,7 @@ function App() {
     e.preventDefault();
     setRespuesta("Enviando...");
     try {
-      const res = await fetch("http://127.0.0.1:5000/api/message", {
+      const res = await fetch("http://179.5.119.85/api/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nombre }),
