@@ -2,7 +2,7 @@
 
 # Variables
 SERVER_IP="179.5.119.85"
-PROJECT_NAME="fullstack_project"
+PROJECT_NAME="fullstackapp"
 FRONTEND_DIR="/var/www/html/$PROJECT_NAME"
 BACKEND_DIR="/opt/$PROJECT_NAME"
 
