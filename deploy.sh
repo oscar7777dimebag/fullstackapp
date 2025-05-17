@@ -3,15 +3,17 @@
 # Variables
 SERVER_IP="179.5.119.85"
 PROJECT_NAME="fullstackapp"
-FRONTEND_DIR="/var/www/html/$PROJECT_NAME"
-BACKEND_DIR="/opt/$PROJECT_NAME"
+USER_NAME="dimebag"
+HOME_DIR="/home/$USER_NAME"
+FRONTEND_DIR="$HOME_DIR/$PROJECT_NAME/frontend"
+BACKEND_DIR="$HOME_DIR/$PROJECT_NAME/backend"
 
 echo "🚀 Starting deployment process..."
 
 # Kill any existing Node.js and Python processes
 echo "Stopping existing processes..."
-pkill -f node || true
-pkill -f python || true
+sudo systemctl stop fullstackapp-backend || true
+sudo pkill -f "python3 app.py" || true
 
 # Install required packages if not present
 echo "Checking and installing dependencies..."
@@ -26,37 +28,50 @@ if ! command -v node &> /dev/null; then
 fi
 
 if ! command -v python3 &> /dev/null; then
-    sudo apt-get install -y python3 python3-pip
+    sudo apt-get install -y python3 python3-pip python3-venv
 fi
 
-# Create directories if they don't exist
+# Create project directories
+echo "Creating project directories..."
 sudo mkdir -p $FRONTEND_DIR
 sudo mkdir -p $BACKEND_DIR
+sudo chown -R $USER_NAME:$USER_NAME $HOME_DIR/$PROJECT_NAME
 
-# Copy frontend files
-echo "Building and deploying frontend..."
-cd frontend
+# Setup Python virtual environment
+echo "Setting up Python virtual environment..."
+cd $BACKEND_DIR
+python3 -m venv venv
+source venv/bin/activate
+
+# Copy project files
+echo "Copying project files..."
+cp -r ~/fullstack_project/backend/* $BACKEND_DIR/
+cp -r ~/fullstack_project/frontend/* $FRONTEND_DIR/
+
+# Install dependencies and build frontend
+echo "Building frontend..."
+cd $FRONTEND_DIR
 npm install
 npm run build
-sudo cp -r dist/* $FRONTEND_DIR/
 
-# Copy backend files
-echo "Deploying backend..."
-cd ../backend
-pip3 install -r requirements.txt
-sudo cp -r * $BACKEND_DIR/
+# Install backend dependencies
+echo "Setting up backend..."
+cd $BACKEND_DIR
+pip install -r requirements.txt
 
-# Create systemd service for backend
-echo "Setting up backend service..."
-sudo tee /etc/systemd/system/fullstack-backend.service << EOF
+# Create systemd service
+echo "Creating systemd service..."
+sudo tee /etc/systemd/system/fullstackapp-backend.service << EOF
 [Unit]
-Description=Fullstack Project Backend
+Description=Fullstack App Backend
 After=network.target
 
 [Service]
-User=www-data
+User=$USER_NAME
+Group=$USER_NAME
 WorkingDirectory=$BACKEND_DIR
-ExecStart=/usr/bin/python3 app.py
+Environment="PATH=$BACKEND_DIR/venv/bin"
+ExecStart=$BACKEND_DIR/venv/bin/python3 app.py
 Restart=always
 
 [Install]
@@ -65,13 +80,13 @@ EOF
 
 # Configure Nginx
 echo "Configuring Nginx..."
-sudo tee /etc/nginx/sites-available/$PROJECT_NAME << EOF
+sudo tee /etc/nginx/sites-available/fullstackapp << EOF
 server {
     listen 80;
     server_name $SERVER_IP;
 
     location / {
-        root $FRONTEND_DIR;
+        root $FRONTEND_DIR/dist;
         try_files \$uri \$uri/ /index.html;
     }
 
@@ -79,21 +94,32 @@ server {
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
 EOF
 
-# Enable the site and remove default if exists
+# Enable site and restart Nginx
 sudo rm -f /etc/nginx/sites-enabled/default
-sudo ln -sf /etc/nginx/sites-available/$PROJECT_NAME /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/fullstackapp /etc/nginx/sites-enabled/
+
+# Set correct permissions
+sudo chown -R $USER_NAME:$USER_NAME $HOME_DIR/$PROJECT_NAME
+sudo chmod -R 755 $HOME_DIR/$PROJECT_NAME
 
 # Start services
 echo "Starting services..."
 sudo systemctl daemon-reload
-sudo systemctl enable fullstack-backend
-sudo systemctl restart fullstack-backend
+sudo systemctl enable fullstackapp-backend
+sudo systemctl restart fullstackapp-backend
 sudo systemctl restart nginx
 
+# Show status and logs
 echo "🎉 Deployment completed! Your application should be running at http://$SERVER_IP"
-echo "Check status with: sudo systemctl status fullstack-backend"
-echo "Check nginx logs with: sudo tail -f /var/log/nginx/error.log"
+echo "Checking service status..."
+sudo systemctl status fullstackapp-backend
+echo "Checking Nginx configuration..."
+sudo nginx -t
+echo "Recent logs:"
+sudo journalctl -u fullstackapp-backend -n 50 --no-pager
